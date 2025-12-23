@@ -1,6 +1,7 @@
 ﻿#include "simulation.h"
 #include <chrono>
 #include <random>
+
 Simulation::Simulation(int n_phil, int n_forks)
     : num_philosophers(n_phil), num_forks(n_forks), states(n_phil, State::THINKING) {
     for (int i = 0; i < n_forks; ++i) {
@@ -9,12 +10,11 @@ Simulation::Simulation(int n_phil, int n_forks)
 }
 
 Simulation::~Simulation() { 
-    running = false; // 先设置标志位
+    running = false; 
     for (auto& t : threads) {
-        if (t.joinable()) t.join(); // 阻塞等待直到线程退出
+        if (t.joinable()) t.join(); 
     }
     threads.clear();
-    // 只有在所有线程退出后，才能清理 states 和 forks
 }
 
 void Simulation::start() {
@@ -31,11 +31,20 @@ void Simulation::stop() {
     }
     threads.clear();
 }
-// ... 前面 Simulation::Simulation 和 start/stop 逻辑保持 ...
 
 void Simulation::philosopher_thread(int id) {
-    int left = (id * (num_forks / num_philosophers)) % num_forks;
-    int right = (id + 1) % num_forks;
+    // 1. 均匀映射左手叉子
+    int left = (static_cast<long long>(id) * num_forks) / num_philosophers;
+    
+    // 2. 修正：右手叉子必须是左手叉子的逻辑邻居
+    // 这样保证了叉子的连续使用，不会出现中间有空闲叉子却没人能拿的情况
+    int right = (left + 1) % num_forks;
+
+    // 特殊情况处理：如果总叉子数少于2，无法进食（物理死锁），或者计算重叠
+    if (left == right && num_forks > 1) {
+        // 理论上 (x + 1) % N == x 只有在 N=1 时成立
+        // 但为了代码健壮性，保留此检查
+    }
 
     std::random_device rd;
     std::mt19937 gen(rd());
@@ -57,20 +66,18 @@ void Simulation::philosopher_thread(int id) {
 
         bool has_eaten = false;
         while (running && !has_eaten) {
-            // 1. 询问仲裁者（银行家算法或 AI）是否允许拿第一个叉子
-            // 如果不满足安全序列，则不尝试 lock，直接跳过并等待
+            // 1. 询问仲裁者
             if (request_permission(id, left)) {
 
-                // 2. 尝试非阻塞式锁定左手叉子 (std::unique_lock 配合 try_lock)
+                // 2. 尝试锁定左手叉子
                 std::unique_lock<std::mutex> lock_l(forks[left]->mtx, std::defer_lock);
 
                 if (lock_l.try_lock()) {
-                    forks[left]->holder = id; // 标记占用
+                    forks[left]->holder = id; 
 
-                    // 故意延迟，模拟现实中拿起一个叉子到拿起第二个之间的间隔
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-                    // 3. 尝试拿第二个叉子
+                    // 3. 尝试锁定右手叉子
                     std::unique_lock<std::mutex> lock_r(forks[right]->mtx, std::defer_lock);
                     if (lock_r.try_lock()) {
                         forks[right]->holder = id;
@@ -82,24 +89,20 @@ void Simulation::philosopher_thread(int id) {
                         }
                         std::this_thread::sleep_for(std::chrono::milliseconds(dis(gen)));
 
-                        // 释放记录
                         forks[right]->holder = -1;
-                        has_eaten = true; // 成功进食，跳出尝试循环
-                        // lock_r 会在作用域结束时自动析构并释放 mutex
+                        has_eaten = true; 
                     }
                     else {
-                        // 拿不到右手，必须放下左手（回退策略），防止占有并等待
                         forks[left]->holder = -1;
                     }
                 }
             }
 
-            // 如果没吃上，休息一下再重试，避免高频空转消耗 CPU
             if (!has_eaten) {
                 std::this_thread::sleep_for(std::chrono::milliseconds(50));
             }
             else {
-                forks[left]->holder = -1; // 彻底进食完后释放左手标记
+                forks[left]->holder = -1; 
             }
         }
     }
@@ -110,27 +113,27 @@ std::vector<std::vector<int>> Simulation::get_resource_graph() {
     std::vector<std::vector<int>> edges;
 
     for (int i = 0; i < num_philosophers; ++i) {
-        int left = i % num_forks;
-        int right = (i + 1) % num_forks;
+        // 必须与线程逻辑完全一致
+        int left = (static_cast<long long>(i) * num_forks) / num_philosophers;
+        int right = (left + 1) % num_forks;
 
-        // 1. 如果哲学家正在进食，说明他占有了两个叉子 (Resource -> Process)
         if (states[i] == State::EATING) {
-            edges.push_back({ i, left, 1 });  // 1 代表占用
+            edges.push_back({ i, left, 1 });  
             edges.push_back({ i, right, 1 });
         }
-        // 2. 如果哲学家饥饿，检查他是否正持有左手叉子并等待右手叉子
         else if (states[i] == State::HUNGRY) {
             if (forks[left]->holder == i) {
-                edges.push_back({ i, left, 1 });   // 占用左手
-                edges.push_back({ i, right, 0 });  // 请求右手 (0 代表请求)
+                edges.push_back({ i, left, 1 });   
+                edges.push_back({ i, right, 0 });  
             }
             else {
-                edges.push_back({ i, left, 0 });   // 连左手都没拿到，请求左手
+                edges.push_back({ i, left, 0 });   
             }
         }
     }
     return edges;
 }
+
 std::vector<int> Simulation::get_states() {
     std::lock_guard<std::mutex> lock(state_mutex);
     std::vector<int> result;
@@ -142,11 +145,10 @@ bool Simulation::request_permission(int phil_id, int fork_id) {
     std::lock_guard<std::mutex> lock(state_mutex);
 
     int holding_count = 0;
-    for (int i = 0; i < num_forks; ++i) { // 遍历叉子
+    for (int i = 0; i < num_forks; ++i) { 
         if (forks[i]->holder != -1) holding_count++;
     }
 
-    // 预防策略：如果资源极度短缺，确保至少留出一个叉子
     if (holding_count >= num_forks - 1 && forks[fork_id]->holder == -1) {
         return false;
     }
