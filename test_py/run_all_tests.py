@@ -30,6 +30,7 @@ def run_all_tests():
         test_results.append(("并发测试", "❌ 失败", 0))
     
     # 2. 压力测试
+    import traceback
     print("\n[2/4] 运行压力测试（这将需要5分钟）...")
     try:
         from stress_test import StressTester
@@ -38,6 +39,8 @@ def run_all_tests():
         test_results. append(("压力测试", "✅ 通过", 1))
     except Exception as e:
         print(f"❌ 压力测试失败: {e}")
+        print("\n详细错误信息：")
+        traceback.print_exc()
         test_results.append(("压力测试", "❌ 失败", 0))
     
     # 3. 边界测试

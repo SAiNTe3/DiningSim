@@ -97,10 +97,10 @@ class StressTester:
         print("压力测试结果")
         print(f"{'='*60}")
         print(f"✓ 总进餐次数: {result['total_meals']}")
-        print(f"✓ 吞吐量: {result['throughput']:. 2f} 次/秒")
+        print(f"✓ 吞吐量: {result['throughput']:.2f} 次/秒")
         print(f"✓ 平均CPU: {result['avg_cpu']:.1f}%")
         print(f"✓ 峰值CPU: {result['max_cpu']:.1f}%")
-        print(f"✓ 平均内存:  {result['avg_memory']:. 1f} MB")
+        print(f"✓ 平均内存:  {result['avg_memory']:.1f} MB")
         print(f"✓ 峰值内存: {result['max_memory']:.1f} MB")
         print(f"✓ 最大线程数: {result['max_threads']}")
         print(f"✓ 上下文切换: {result['total_ctx_switches']}")
@@ -122,7 +122,7 @@ class StressTester:
             
             f.write("## 测试配置\n\n")
             f.write(f"- **哲学家数量**: {result['philosophers']}\n")
-            f.write(f"- **运行时间**: {result['duration']}秒 ({result['duration']/60:. 1f}分钟)\n\n")
+            f.write(f"- **运行时间**: {result['duration']}秒 ({result['duration']/60:.1f}分钟)\n\n")
             
             f. write("## 性能指标\n\n")
             f.write("| 指标 | 数值 |\n")
