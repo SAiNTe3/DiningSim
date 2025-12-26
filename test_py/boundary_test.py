@@ -148,7 +148,7 @@ class BoundaryTester:
         print("边界测试: 单哲学家（边界最小配置）")
         print(f"{'='*60}")
         
-        sim = sim_core. Simulation(1, 1)
+        sim = sim_core. Simulation(1, 2)
         sim.start()
         time.sleep(10)
         

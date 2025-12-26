@@ -65,7 +65,7 @@ def generate_summary_report(test_results):
     """生成综合测试报告"""
     os.makedirs('test_reports', exist_ok=True)
     
-    report_path = 'test_reports/summary_report. md'
+    report_path = 'test_reports/summary_report.md'
     
     with open(report_path, 'w', encoding='utf-8') as f:
         f.write("# 测试套件综合报告\n\n")
