@@ -4,13 +4,17 @@
 #include <windows.h>
 #include <process.h>
 #else
-#error "This file is only for Windows platform"
+// POSIX/Linux support
+#include <pthread.h>
+#include <semaphore.h>
+#include <unistd.h>
+#include <time.h>
 #endif
 
 #include <atomic>
 #include <functional>
 
-// 封装 Windows CRITICAL_SECTION，提供 RAII 管理
+// Cross-platform Mutex wrapper
 class WinMutex {
 public:
     WinMutex();
@@ -24,10 +28,14 @@ public:
     WinMutex& operator=(const WinMutex&) = delete;
 
 private:
+#ifdef _WIN32
     CRITICAL_SECTION cs;
+#else
+    pthread_mutex_t mutex;
+#endif
 };
 
-// 封装 RAII 风格的锁守卫
+// RAII lock guard
 class WinLockGuard {
 public:
     explicit WinLockGuard(WinMutex& m) : mutex(m) {
@@ -44,45 +52,67 @@ private:
     WinMutex& mutex;
 };
 
-// 封装 Windows 信号量（可选，用于优化资源分配）
+// Cross-platform Semaphore wrapper
 class WinSemaphore {
 public:
     explicit WinSemaphore(long initial_count = 0, long max_count = 1);
     ~WinSemaphore();
 
     void wait();
+#ifdef _WIN32
     bool try_wait(DWORD timeout_ms = 0);
+#else
+    bool try_wait(unsigned int timeout_ms = 0);
+#endif
     void post();
 
     WinSemaphore(const WinSemaphore&) = delete;
     WinSemaphore& operator=(const WinSemaphore&) = delete;
 
 private:
+#ifdef _WIN32
     HANDLE handle;
+#else
+    sem_t sem;
+#endif
 };
 
-// 封装 Windows 线程
+// Cross-platform Thread wrapper
 class WinThread {
 public:
+#ifdef _WIN32
     WinThread() : handle(NULL) {}
+#else
+    WinThread() : thread_id(0), started(false) {}
+#endif
     ~WinThread();
 
-    // 启动线程（传入函数对象）
+    // Start thread with function
     template<typename Func>
     void start(Func&& func) {
         auto* wrapper = new std::function<void()>(std::forward<Func>(func));
+#ifdef _WIN32
         handle = (HANDLE)_beginthreadex(
             NULL, 0, thread_proc, wrapper, 0, NULL
         );
+#else
+        started = true;
+        pthread_create(&thread_id, NULL, thread_proc, wrapper);
+#endif
     }
 
     void join();
+#ifdef _WIN32
     bool joinable() const { return handle != NULL; }
+#else
+    bool joinable() const { return started; }
+#endif
 
     WinThread(const WinThread&) = delete;
     WinThread& operator=(const WinThread&) = delete;
 
 private:
+#ifdef _WIN32
     HANDLE handle;
 
     static unsigned int __stdcall thread_proc(void* arg) {
@@ -91,4 +121,15 @@ private:
         delete func;
         return 0;
     }
+#else
+    pthread_t thread_id;
+    bool started;
+
+    static void* thread_proc(void* arg) {
+        auto* func = static_cast<std::function<void()>*>(arg);
+        (*func)();
+        delete func;
+        return nullptr;
+    }
+#endif
 };

@@ -5,6 +5,16 @@
 #include <map>
 #include <iostream>
 
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <unistd.h>
+// Cross-platform sleep function
+inline void Sleep(unsigned int milliseconds) {
+    usleep(milliseconds * 1000);
+}
+#endif
+
 // Simulation 类实现了一个哲学家就餐问题的仿真。
 // 主要包含：线程并发控制（WinThread / WinMutex）、资源分配策略（Banker's Algorithm 的简化形式）、
 // 死锁检测、以及反饥饿（starvation）处理等操作系统相关概念。

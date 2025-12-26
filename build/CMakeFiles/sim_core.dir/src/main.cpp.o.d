@@ -403,4 +403,5 @@ CMakeFiles/sim_core.dir/src/main.cpp.o: \
  /usr/include/c++/13/bits/mask_array.h \
  /usr/include/c++/13/bits/indirect_array.h /usr/include/c++/13/variant \
  /home/runner/work/DiningSim/DiningSim/src/simulation.h \
- /home/runner/work/DiningSim/DiningSim/src/win_sync.h
+ /home/runner/work/DiningSim/DiningSim/src/win_sync.h \
+ /usr/include/semaphore.h /usr/include/x86_64-linux-gnu/bits/semaphore.h
