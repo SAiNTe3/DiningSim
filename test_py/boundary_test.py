@@ -13,7 +13,7 @@ import os
 import time
 from datetime import datetime
 
-sys.path. append('./build/Release')
+sys.path. append('../build/Release')
 import sim_core
 
 class BoundaryTester:
@@ -23,10 +23,10 @@ class BoundaryTester:
     def test_extreme_competition(self):
         """边界测试1:  极端资源竞争"""
         print(f"\n{'='*60}")
-        print("边界测试: 极端竞争（2哲学家 + 1叉子）")
+        print("边界测试: 极端竞争（2哲学家 + 2叉子）")
         print(f"{'='*60}")
         
-        sim = sim_core.Simulation(2, 1)
+        sim = sim_core.Simulation(2, 2)
         sim.start()
         time.sleep(30)
         
@@ -37,7 +37,7 @@ class BoundaryTester:
         
         result = {
             "name": "极端竞争",
-            "config": "2P+1F",
+            "config": "2P+2F",
             "meals": len(eat_events),
             "passed": len(eat_events) > 0  # 至少有人能吃到
         }

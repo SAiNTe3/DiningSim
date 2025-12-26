@@ -14,7 +14,7 @@ import psutil
 import threading
 from datetime import datetime
 
-sys.path. append('./build/Release')
+sys.path. append('../build/Release')
 import sim_core
 
 class StressTester:
