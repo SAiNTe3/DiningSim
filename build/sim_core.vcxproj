@@ -330,6 +330,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   <ItemGroup>
     <ClCompile Include="C:\Users\oecxw\source\repos\DiningSim\src\main.cpp" />
     <ClCompile Include="C:\Users\oecxw\source\repos\DiningSim\src\simulation.cpp" />
+    <ClCompile Include="C:\Users\oecxw\source\repos\DiningSim\src\win_sync.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="C:\Users\oecxw\source\repos\DiningSim\build\ZERO_CHECK.vcxproj">

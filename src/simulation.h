@@ -1,18 +1,22 @@
 ﻿#pragma once
 #include <vector>
-#include <thread>
-#include <mutex>
-#include <atomic>
 #include <string>
 #include <memory>
 #include <deque>
+#include "win_sync.h" // 使用 Windows 同步原语封装
 
 enum class State { THINKING, HUNGRY, EATING };
 enum class Strategy { NONE, BANKER }; 
 
 struct Fork {
-    std::mutex mtx;
-    std::atomic<int> holder{ -1 };
+    WinMutex mtx; // 使用 WinMutex
+    int holder; 
+    
+    Fork() : holder(-1) {}
+    
+    // 禁止拷贝
+    Fork(const Fork&) = delete;
+    Fork& operator=(const Fork&) = delete;
 };
 
 struct SimEvent {
@@ -42,25 +46,25 @@ public:
 private:
     int num_philosophers;
     int num_forks;
-    std::atomic<bool> running{ false };
-    Strategy current_strategy{ Strategy::NONE };
+    volatile bool running; 
+    Strategy current_strategy;
 
     std::vector<State> states;
     std::vector<std::unique_ptr<Fork>> forks;
-    std::vector<std::thread> threads;
+    std::vector<std::unique_ptr<WinThread>> threads; // 使用 WinThread
     
-    // 新增：饥饿计数器，用于防止饥饿
+    // 饥饿计数器，用于防止饥饿
     std::vector<int> wait_counts;
     std::vector<int> eat_counts;
     std::vector<int> max_wait_counts;
     std::vector<std::vector<int>> competitors;
-    const int STARVATION_THRESHOLD = 10; // 饥饿阈值：失败10次后被视为"饥饿"
+    const int STARVATION_THRESHOLD = 10;
 
-    std::mutex event_mutex;
+    WinMutex event_mutex; // 使用 WinMutex
     std::deque<SimEvent> event_queue;
     void log_event(int phil_id, const std::string& type, const std::string& details);
 
-    std::mutex state_mutex;
+    WinMutex state_mutex; // 使用 WinMutex
 
     void philosopher_thread(int id);
     bool request_permission(int phil_id, int fork_id);

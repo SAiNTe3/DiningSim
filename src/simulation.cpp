@@ -6,11 +6,13 @@
 #include <iostream>
 
 // Simulation 类实现了一个哲学家就餐问题的仿真。
-// 主要包含：线程并发控制（std::thread / std::mutex）、资源分配策略（Banker's Algorithm 的简化形式）、
+// 主要包含：线程并发控制（WinThread / WinMutex）、资源分配策略（Banker's Algorithm 的简化形式）、
 // 死锁检测、以及反饥饿（starvation）处理等操作系统相关概念。
 
 Simulation::Simulation(int n_phil, int n_forks)
     : num_philosophers(n_phil), num_forks(n_forks), 
+      running(false),  // 显式初始化为 false
+      current_strategy(Strategy::NONE),  // 显式初始化策略
       states(n_phil, State::THINKING), 
       wait_counts(n_phil, 0),
       eat_counts(n_phil, 0),
@@ -53,7 +55,9 @@ void Simulation::start() {
     running = true;
     for (int i = 0; i < num_philosophers; ++i) {
         // 每个线程运行 philosopher_thread，代表一个并发执行的进程/线程
-        threads.emplace_back(&Simulation::philosopher_thread, this, i);
+        auto t = std::make_unique<WinThread>();
+        t->start([this, i]() { this->philosopher_thread(i); });
+        threads.push_back(std::move(t));
     }
     log_event(-1, "SYSTEM", "Simulation started");
 }
@@ -62,7 +66,7 @@ void Simulation::stop() {
     // 停止仿真：先通知线程停止（running = false），然后 join 等待线程退出，避免悬挂线程。
     running = false;
     for (auto& t : threads) {
-        if (t.joinable()) t.join();
+        if (t->joinable()) t->join();
     }
     threads.clear();
 
@@ -82,7 +86,7 @@ void Simulation::stop() {
 
 void Simulation::set_strategy(int strategy_code) {
     // 修改资源分配策略需要对共享状态上锁，避免竞态条件
-    std::lock_guard<std::mutex> lock(state_mutex);
+    WinLockGuard lock(state_mutex);
     if (strategy_code == 1) current_strategy = Strategy::BANKER;
     else current_strategy = Strategy::NONE;
     log_event(-1, "SYSTEM", "Strategy changed to " + std::to_string(strategy_code));
@@ -90,7 +94,7 @@ void Simulation::set_strategy(int strategy_code) {
 
 void Simulation::log_event(int phil_id, const std::string& type, const std::string& details) {
     // 事件记录受 event_mutex 保护，避免多线程并发写入导致数据不一致
-    std::lock_guard<std::mutex> lock(event_mutex);
+    WinLockGuard lock(event_mutex);
     auto now = std::chrono::system_clock::now().time_since_epoch();
     double ts = std::chrono::duration<double>(now).count();
     event_queue.push_back({ts, phil_id, type, details});
@@ -100,7 +104,7 @@ void Simulation::log_event(int phil_id, const std::string& type, const std::stri
 
 std::vector<SimEvent> Simulation::poll_events() {
     // 从事件队列中取出所有事件并清空队列，使用锁来保证一致性
-    std::lock_guard<std::mutex> lock(event_mutex);
+    WinLockGuard lock(event_mutex);
     std::vector<SimEvent> events(event_queue.begin(), event_queue.end());
     event_queue.clear();
     return events;
@@ -176,7 +180,7 @@ bool Simulation::is_safe_state(int phil_id, int fork_id) {
 
 bool Simulation::request_permission(int phil_id, int fork_id) {
     // 该函数在修改共享状态前加锁以保证原子性，避免竞态条件
-    std::lock_guard<std::mutex> lock(state_mutex);
+    WinLockGuard lock(state_mutex);
 
     // 1. 基础检查：叉子是否被占用
     if (forks[fork_id]->holder != -1) return false;
@@ -213,15 +217,15 @@ void Simulation::philosopher_thread(int id) {
     while (running) {
         // THINKING：占用状态锁来安全更新状态数组
         {
-            std::lock_guard<std::mutex> lock(state_mutex);
+            WinLockGuard lock(state_mutex);
             states[id] = State::THINKING;
         }
         log_event(id, "STATE", "THINKING");
-        std::this_thread::sleep_for(std::chrono::milliseconds(dis(gen)));
+        Sleep(dis(gen)); // 使用 Windows API Sleep 替代 std::this_thread::sleep_for
 
         // HUNGRY：想要吃饭，开始尝试获取资源，并重置本轮等待计数
         {
-            std::lock_guard<std::mutex> lock(state_mutex);
+            WinLockGuard lock(state_mutex);
             states[id] = State::HUNGRY;
             wait_counts[id] = 0; // 开始新一轮饥饿，计数归零
         }
@@ -231,27 +235,25 @@ void Simulation::philosopher_thread(int id) {
         while (running && !has_eaten) {
             // 先向系统请求是否允许获取左叉子（高层策略判断）
             if (request_permission(id, left)) {
-                // 使用 std::unique_lock 和 try_lock 做非阻塞尝试拿锁，避免死锁（不会一直阻塞在拿第一把或第二把叉子上）
-                std::unique_lock<std::mutex> lock_l(forks[left]->mtx, std::defer_lock);
-                if (lock_l.try_lock()) {
+                // 使用 WinMutex 的 try_lock 做非阻塞尝试拿锁
+                if (forks[left]->mtx.try_lock()) {
                     // 成功获得左叉子互斥量后，设置 holder 标志以供其他逻辑读取
                     forks[left]->holder = id;
                     log_event(id, "ACQUIRE", "Left Fork " + std::to_string(left));
 
                     // 小暂停模拟获取第二把叉子的延时（也能暴露出并发竞争）
-                    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                    Sleep(10); // 使用 Windows API Sleep
 
                     // 请求是否允许获取右叉子
                     if (request_permission(id, right)) { 
-                        std::unique_lock<std::mutex> lock_r(forks[right]->mtx, std::defer_lock);
-                        if (lock_r.try_lock()) {
+                        if (forks[right]->mtx.try_lock()) {
                             // 成功获取右叉子
                             forks[right]->holder = id;
                             log_event(id, "ACQUIRE", "Right Fork " + std::to_string(right));
 
                             // EATING：更新状态并统计，此处对共享状态上锁
                             {
-                                std::lock_guard<std::mutex> lock(state_mutex);
+                                WinLockGuard lock(state_mutex);
                                 states[id] = State::EATING;
                                 
                                 eat_counts[id]++;
@@ -261,28 +263,31 @@ void Simulation::philosopher_thread(int id) {
                                 wait_counts[id] = 0; // 成功进食，重置计数
                             }
                             log_event(id, "STATE", "EATING");
-                            std::this_thread::sleep_for(std::chrono::milliseconds(dis(gen)));
+                            Sleep(dis(gen)); // 使用 Windows API Sleep
 
-                            // 释放资源：先释放右手再释放左手。注意这里只是修改 holder 字段并未显式 unlock 对应的互斥量对象，
-                            // 因为 lock_r 和 lock_l 是在作用域之外会自动释放（RAII）。但是我们仍然显式设置 holder 为 -1 以表示资源可用。
+                            // 释放资源：先释放右手再释放左手。
                             forks[right]->holder = -1;
+                            forks[right]->mtx.unlock();
                             log_event(id, "RELEASE", "Right Fork " + std::to_string(right));
                             
                             forks[left]->holder = -1;
+                            forks[left]->mtx.unlock();
                             log_event(id, "RELEASE", "Left Fork " + std::to_string(left));
                             
                             has_eaten = true;
                         } else {
                             // 未能拿到右叉子：回退（把左叉子放下），并进行短暂退避以减少活锁竞争
                             forks[left]->holder = -1;
+                            forks[left]->mtx.unlock();
                             log_event(id, "RELEASE", "Left Fork " + std::to_string(left) + " (Backoff)");
-                            std::this_thread::sleep_for(std::chrono::milliseconds(dis(gen) / 10));
+                            Sleep(dis(gen) / 10); // 使用 Windows API Sleep
                         }
                     } else {
                          // 策略层拒绝分配右叉子，回退左叉子
                          forks[left]->holder = -1;
+                         forks[left]->mtx.unlock();
                          log_event(id, "RELEASE", "Left Fork " + std::to_string(left) + " (Permission Denied)");
-                         std::this_thread::sleep_for(std::chrono::milliseconds(dis(gen) / 10));
+                         Sleep(dis(gen) / 10); // 使用 Windows API Sleep
                     }
                 }
             }
@@ -290,11 +295,11 @@ void Simulation::philosopher_thread(int id) {
             if (!has_eaten) {
                 // 增加等待计数：用于反饥饿策略判断（注意使用锁同步）
                 {
-                    std::lock_guard<std::mutex> lock(state_mutex);
+                    WinLockGuard lock(state_mutex);
                     wait_counts[id]++;
                 }
                 // 等待一小段时间后重试，避免 busy-wait
-                std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                Sleep(50); // 使用 Windows API Sleep
             }
         }
     }
@@ -302,7 +307,7 @@ void Simulation::philosopher_thread(int id) {
 
 bool Simulation::detect_deadlock() {
     // 基于当前状态构建等待图（部分资源分配图）并检测环路，如果存在环路则判定为死锁
-    std::lock_guard<std::mutex> lock(state_mutex);
+    WinLockGuard lock(state_mutex);
     std::map<int, int> waiting_for; 
     for (int i = 0; i < num_philosophers; ++i) {
         if (states[i] == State::HUNGRY) {
@@ -336,7 +341,7 @@ bool Simulation::detect_deadlock() {
 std::vector<std::vector<int>> Simulation::get_resource_graph() {
     // 返回资源图的一个表示：每个 edge 三元组含义为 {philosopher, resource, holding_flag}
     // holding_flag = 1 表示哲学家占有该资源，0 表示在请求但未占有
-    std::lock_guard<std::mutex> lock(state_mutex);
+    WinLockGuard lock(state_mutex);
     std::vector<std::vector<int>> edges;
     for (int i = 0; i < num_philosophers; ++i) {
         int left = (static_cast<long long>(i) * num_forks) / num_philosophers;
@@ -360,7 +365,7 @@ std::vector<std::vector<int>> Simulation::get_resource_graph() {
 
 std::vector<int> Simulation::get_states() {
     // 获取所有哲学家的状态（用于 UI 或外部监控），对共享状态上锁以保证一致性
-    std::lock_guard<std::mutex> lock(state_mutex);
+    WinLockGuard lock(state_mutex);
     std::vector<int> result;
     for (auto s : states) result.push_back(static_cast<int>(s));
     return result;
