@@ -1,0 +1,1 @@
+/usr/bin/c++ -fPIC -flto=auto -Wl,--dependency-file=CMakeFiles/sim_core.dir/link.d -shared  -o sim_core.cpython-312-x86_64-linux-gnu.so CMakeFiles/sim_core.dir/src/main.cpp.o CMakeFiles/sim_core.dir/src/simulation.cpp.o CMakeFiles/sim_core.dir/src/win_sync.cpp.o
