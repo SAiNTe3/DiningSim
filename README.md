@@ -1,11 +1,11 @@
-# 哲学家就餐问题并发控制系统 (DiningSim)
+# 哲学家进餐问题的资源竞争可视化仿真平台 (DiningSim)
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)]()
 [![Platform](https://img.shields.io/badge/platform-Windows-blue)]()
 [![Language](https://img.shields.io/badge/language-C%2B%2B17%20%7C%20Python3-orange)]()
 [![License](https://img.shields.io/badge/license-MIT-green)]()
 
-> 基于 Windows 系统调用的哲学家就餐问题并发控制模拟器
+> 基于 Windows 系统调用的哲学家进餐问题并发控制模拟器
 > 
 > 操作系统课程设计项目 - 演示进程/线程同步机制与死锁避免算法
 
@@ -13,7 +13,7 @@
 
 ## 📋 项目简介
 
-本项目实现了经典的**哲学家就餐问题**（Dining Philosophers Problem），通过 Windows 原生系统调用演示并发控制、死锁避免和资源分配策略。
+本项目实现了经典的**哲学家进餐问题**（Dining Philosophers Problem），通过 Windows 原生系统调用演示并发控制、死锁避免和资源分配策略。
 
 ### 核心特性
 
@@ -308,18 +308,11 @@ git commit -m "docs: 更新架构设计文档"
 
 ## 🙏 致谢
 
-- 操作系统课程教学团队
 - [pybind11](https://github.com/pybind/pybind11) 项目
 - [PyQt6](https://www.riverbankcomputing.com/software/pyqt/) 框架
 
 ---
 
-## 📞 联系方式
-
-- **Issue Tracker**: [GitHub Issues](https://github.com/SAiNTe3/DiningSim/issues)
-- **Pull Requests**: [GitHub PRs](https://github.com/SAiNTe3/DiningSim/pulls)
-
----
 
 ## 📈 项目统计
 
